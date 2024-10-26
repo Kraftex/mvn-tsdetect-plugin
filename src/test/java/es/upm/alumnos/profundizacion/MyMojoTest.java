@@ -31,7 +31,7 @@ public class MyMojoTest
     @Test
     public void testTSDetectPlugInSimpleProject() throws Exception
     {
-        File pom = new File( "target/test-classes/project-to-test/" );
+        File pom = new File("target/test-classes/project-to-test/");
         assertNotNull( pom );
         assertTrue( pom.exists() );
 
