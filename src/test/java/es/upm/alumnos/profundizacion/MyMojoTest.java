@@ -29,27 +29,26 @@ public class MyMojoTest
      * @throws Exception if any
      */
     @Test
-    public void testSomething()
-            throws Exception
+    public void testTSDetectPlugInSimpleProject() throws Exception
     {
         File pom = new File( "target/test-classes/project-to-test/" );
         assertNotNull( pom );
         assertTrue( pom.exists() );
 
-        MyMojo myMojo = ( MyMojo ) rule.lookupConfiguredMojo( pom, "touch" );
+        MyMojo myMojo = ( MyMojo ) rule.lookupConfiguredMojo( pom, "tsdetect" );
         assertNotNull( myMojo );
         myMojo.execute();
 
-        File outputDirectory = ( File ) rule.getVariableValueFromObject( myMojo, "outputDirectory" );
-        assertNotNull( outputDirectory );
-        assertTrue( outputDirectory.exists() );
+        //File outputDirectory = ( File ) rule.getVariableValueFromObject( myMojo, "outputDirectory" );
+        //assertNotNull( outputDirectory );
+        //assertTrue( outputDirectory.exists() );
 
-        File touch = new File( outputDirectory, "touch.txt" );
-        assertTrue( touch.exists() );
+        //File touch = new File( outputDirectory, "touch.txt" );
+        //assertTrue( touch.exists() );
 
-        File expectedOutputDirectory = new File
-          (pom.getAbsoluteFile(), "target/test-harness/project-to-test");
-        assertEquals(expectedOutputDirectory, outputDirectory);
+        //File expectedOutputDirectory = new File
+        //  (pom.getAbsoluteFile(), "target/test-harness/project-to-test");
+        //assertEquals(expectedOutputDirectory, outputDirectory);
     }
 
     /** Do not need the MojoRule. */

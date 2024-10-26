@@ -7,8 +7,13 @@
   <groupId>es.upm.alumnos.profundizacion</groupId>
   <artifactId>project-to-test</artifactId>
   <version>1.0-SNAPSHOT</version>
+
   <packaging>jar</packaging>
   <name>Test MyMojo</name>
+
+  <properties>
+  	<tsdetect.inputCSV>InputCSV from Project pom.xml</tsdetect.inputCSV>
+  </properties>
 
   <build>
     <plugins>
@@ -17,7 +22,9 @@
         <artifactId>mvn-tsdetect-plugin</artifactId>
         <configuration>
           <!-- Specify the MyMojo parameter -->
-          <outputDirectory>target/test-harness/project-to-test</outputDirectory>
+          <!-- Hihger priority -->
+          <inputCSV>Path/to/my/file/inputCSV</inputCSV>
+          <nothing>NOTHING</nothing>
         </configuration>
       </plugin>
     </plugins>
