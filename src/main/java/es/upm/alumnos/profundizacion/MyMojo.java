@@ -11,8 +11,10 @@ import org.apache.maven.plugins.annotations.Parameter;
 import java.io.File;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -23,6 +25,7 @@ import java.util.stream.Collectors;
 public class MyMojo extends AbstractMojo
 {
 	private static final String JAVA_EXT = ".java";
+	private static final Predicate<String> isJavaFile = file -> file.endsWith(JAVA_EXT);
 	public static class SuperObject
 	{
 		@Override
@@ -43,13 +46,13 @@ public class MyMojo extends AbstractMojo
 		}
 	}
 	
-	public class ProductionFile extends SuperObject
+	public class InfoFile extends SuperObject
 	{
 		private String fullname;  // es.upm.Master
 		private String name;      // Master
 		private String filepath;  // /path/to/project/es/upm/Master.java
 		
-		public ProductionFile ( final String filepath )
+		public InfoFile ( final String filepath )
 		{
 			this.filepath = filepath;
 			final String source = sourceCodeDir.getAbsolutePath();
@@ -103,6 +106,12 @@ public class MyMojo extends AbstractMojo
     @Parameter(defaultValue = "${project.build.testSourceDirectory}")
     private File testCodeDir;
     
+    @Parameter(defaultValue = "${project.groupId}")
+    private String projGroupId;
+    
+    @Parameter(defaultValue = "${project.artifactId}")
+    private String projArtifactId;
+    
     //configuration has higher preference over pom project property.
     @Parameter(defaultValue = "<blank>", property = "tsdetect.inputCSV", required = false)
     private String inputCSV;
@@ -114,30 +123,71 @@ public class MyMojo extends AbstractMojo
     {
     	info("pwd: %s", pwd());
     	Map context = getPluginContext();
-    	info("context: %s", context);
-    	info("Auto variables:");
-    	printAttribute("sourceCodeDir", "- %s: %s");
-    	printAttribute("testCodeDir", "- %s: %s");
-    	info("Other variables:");
-    	printAttribute("nothing", "- %s: %s");
-    	printAttribute("inputCSV", "- %s: %s");
-    	info("Gathering production files:");
-    	final List<ProductionFile> prodFiles = getProductionFiles();
-    	prodFiles.forEach( file -> info("- %s", file) );
-    	//Report errors through MojoExecutionException, wrapping actual Exception
-    	//throw reportException(e, "Error creating file %s", filename);
     	if (context != null)
+    	{
 			for(Object entry: context.entrySet())
 			{
 				info("[%s]: %s", entry.getClass(), entry);
 			}
+    	}
+    	info("context: %s", context);
+    	info("Auto variables:");
+    	printAttribute("sourceCodeDir", "- %s: %s");
+    	printAttribute("testCodeDir", "- %s: %s");
+    	printAttribute("projGroupId", "- %s: %s");
+    	printAttribute("projArtifactId", "- %s: %s");
+    	info("Other variables:");
+    	printAttribute("nothing", "- %s: %s");
+    	printAttribute("inputCSV", "- %s: %s");
+    	info("Gathering production files:");
+    	final List<InfoFile> prodFiles = getProductionFiles();
+    	prodFiles.forEach( file -> info("- %s", file) );
+    	info("Gathering test files:");
+    	final List<InfoFile> testFiles = getTestFiles();
+    	testFiles.forEach( file -> info("- %s", file) );
+    	info("Matching prod-test files:");
+    	final Map<InfoFile, InfoFile> matchedFiles = matchProductionToTestFile(prodFiles, testFiles);
+    	matchedFiles.entrySet().forEach( entry -> info("- %s > %s", entry.getKey().name(), entry.getValue().name()) );
+    	//Report errors through MojoExecutionException, wrapping actual Exception
+    	//throw reportException(e, "Error creating file %s", filename);
     }
     
-    public List<ProductionFile> getProductionFiles ( )
+    public List<InfoFile> getProductionFiles ( )
     {
-    	//final List<ProductionFile> result = new ArrayList<>();
-    	//getFullpathFiles(sourceCodeDir).forEach();
-    	return getFullpathFiles(sourceCodeDir).stream().filter(file -> file.endsWith(JAVA_EXT)).map(ProductionFile::new).collect(Collectors.toList());
+    	return getFullpathFiles(sourceCodeDir).stream().filter(isJavaFile).map(InfoFile::new).collect(Collectors.toList());
+    }
+    
+    public List<InfoFile> getTestFiles ( )
+    {
+    	return getFullpathFiles(testCodeDir).stream().filter(isJavaFile).map(InfoFile::new).collect(Collectors.toList());
+    }
+    
+    public boolean checkProductionMatchTestFile ( InfoFile prodFile, InfoFile testFile )
+    {
+    	return testFile.name().equals(prodFile.name()+"Test")
+    		   || testFile.name().equals(prodFile.name()+"TestSuite")
+    		   || testFile.name().equals("Test"+prodFile.name());
+    }
+    
+    public Map<InfoFile, InfoFile> matchProductionToTestFile ( final List<InfoFile> prodFiles, final List<InfoFile> testFiles )
+    {
+    	Map<InfoFile, InfoFile> result = new HashMap<>();
+    	boolean[] testFilesMask = new boolean[testFiles.size()];
+    	for ( InfoFile file: prodFiles )
+    	{
+    		for ( int i = 0; i < testFilesMask.length; i++ )
+    		{
+    			if (testFilesMask[i])
+    				continue;
+    			InfoFile testFile = testFiles.get(i);
+    			if (checkProductionMatchTestFile(file, testFile))
+    			{
+    				testFilesMask[i] = true;
+    				result.put(file, testFile);
+    			}
+    		}
+    	}
+    	return result;
     }
     
     public List<String> getFullpathFiles ( File dir )
@@ -159,13 +209,13 @@ public class MyMojo extends AbstractMojo
     	}
     }
     
-    private void printAttribute ( String name, String... fmt )
+    private void printAttribute ( String name, String fmt )
     {
     	Class<?> clazz = this.getClass();
     	try {
-			Field attribute = clazz.getDeclaredField(name);//find(clazz.getFi);
-			if (fmt.length != 0)
-				info(fmt[0], name, attribute.get(this));
+			Field attribute = clazz.getDeclaredField(name);
+			if (fmt != null)
+				info(fmt, name, attribute.get(this));
 			else
 				info("%s: %s", name, attribute.get(this));
 		} catch (NoSuchFieldException e) {
