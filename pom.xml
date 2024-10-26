@@ -119,6 +119,7 @@
         <artifactId>maven-plugin-plugin</artifactId>
         <configuration>
           <!-- <goalPrefix>maven-archetype-plugin</goalPrefix> -->
+          <goalPrefix>tsdetect</goalPrefix>
           <skipErrorNoDescriptorsFound>true</skipErrorNoDescriptorsFound>
         </configuration>
         <executions>
