@@ -12,20 +12,30 @@
   <name>Test MyMojo</name>
 
   <properties>
-  	<tsdetect.inputCSV>InputCSV from Project pom.xml</tsdetect.inputCSV>
+    <tsdetect.inputCSV>InputCSV from Project pom.xml</tsdetect.inputCSV>
   </properties>
 
   <build>
     <plugins>
+      <!-- Example of how to address the plugin an configure -->
       <plugin>
         <groupId>es.upm.alumnos.profundizacion</groupId>
         <artifactId>mvn-tsdetect-plugin</artifactId>
+        <version>1.0-SNAPSHOT</version>
         <configuration>
-          <!-- Specify the MyMojo parameter -->
-          <!-- Hihger priority -->
-          <inputCSV>Path/to/my/file/inputCSV</inputCSV>
-          <nothing>NOTHING</nothing>
+          <!-- Hihger priority over properties -->
+          <!-- To run the plugin configure jar location con <jar> -->
+          <!-- 
+            <jar>/path/to/TSDetect.jar</jar>
+           -->
         </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>tsdetect</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>
