@@ -34,6 +34,7 @@ import java.util.stream.Stream;
 @Mojo( name = "tsdetect", defaultPhase = LifecyclePhase.TEST )
 public class MyMojo extends AbstractMojo
 {
+	private static final Object VERBOSE = new Object();
 	private static final String JAVA_EXT = ".java";
 	private static final Predicate<String> isJavaFile = file -> file.endsWith(JAVA_EXT);
 	
@@ -83,9 +84,8 @@ public class MyMojo extends AbstractMojo
 
 	private void info (String fmt, Object... args)
 	{
-		if (args.length > 0 && args[args.length - 1] instanceof Throwable)
+		if (args.length > 0 && args[args.length - 1] == VERBOSE && !verbose)
 		{
-			getLog().info(String.format(fmt, args), (Throwable)args[args.length - 1]);
 			return;
 		}
 		getLog().info(String.format(fmt, args));
@@ -93,21 +93,11 @@ public class MyMojo extends AbstractMojo
 	
 	private void warn (String fmt, Object... args)
 	{
-		if (args.length > 0 && args[args.length - 1] instanceof Throwable)
-		{
-			getLog().warn(String.format(fmt, args), (Throwable)args[args.length - 1]);
-			return;
-		}
 		getLog().warn(String.format(fmt, args));
 	}
 	
 	private void error (String fmt, Object... args)
 	{
-		if (args.length > 0 && args[args.length - 1] instanceof Throwable)
-		{
-			getLog().error(String.format(fmt, args), (Throwable)args[args.length - 1]);
-			return;
-		}
 		getLog().error(String.format(fmt, args));
 	}
 	
@@ -120,49 +110,36 @@ public class MyMojo extends AbstractMojo
     @Parameter(defaultValue = "${project.reporting.outputDirectory}")
     private File projReportDir;
     
-    @Parameter(defaultValue = "${project.groupId}")
-    private String projGroupId;
-    
     @Parameter(defaultValue = "${project.artifactId}")
     private String projArtifactId;
     
     //configuration has higher preference over pom project property.
-    @Parameter(property = "tsdetect.jar", required = true)
-    private File jar;
-    
-    //TODO: Make debugs to be output as infos
     @Parameter(property = "tsdetect.verbose")
     private boolean verbose = false;
+    
+    @Parameter(property = "tsdetect.threshold")
+    private long threshold = 0;
     
     @Parameter(defaultValue = "java", property = "tsdetect.java")
     private String java;
     
-    @Parameter
-    private String nothing;
-
+    @Parameter(property = "tsdetect.jar", required = true)
+    private File jar;
+    
     public void execute() throws MojoExecutionException
     {
-    	info("pwd: %s", pwd());
-    	info("java.home: ",System.getProperty("java.home"));
-    	Map context = getPluginContext();
-    	if (context != null)
-    	{
-			for(Object entry: context.entrySet())
-			{
-				info("[%s]: %s", entry.getClass(), entry);
-			}
-    	}
-    	info("context: %s", context);
-    	info("Auto variables:");
+    	info("pwd: %s", pwd(), VERBOSE);
+    	info("java.home: ",System.getProperty("java.home"), VERBOSE);
+    	info("Auto variables:", VERBOSE);
     	printAttribute("sourceCodeDir", "- %s: %s");
     	printAttribute("testCodeDir", "- %s: %s");
     	printAttribute("projReportDir", "- %s: %s");
-    	printAttribute("projGroupId", "- %s: %s");
     	printAttribute("projArtifactId", "- %s: %s");
-    	info("Other variables:");
-    	printAttribute("nothing", "- %s: %s");
+    	info("Other variables:", VERBOSE);
     	printAttribute("verbose", "- %s: %s");
+    	printAttribute("threshold", "- %s: %s");
     	printAttribute("jar", "- %s: %s");
+    	printAttribute("java", "- %s: %s");
     	if (jar == null)
     	{
     		throw reportException(null, "Property 'tsdetect.jar' or configuration for 'jar' no configure.");
@@ -176,15 +153,15 @@ public class MyMojo extends AbstractMojo
     		info("Creating reporting directory: %s", projReportDir.getAbsolutePath());
     		projReportDir.mkdirs();
     	}
-    	info("Gathering production files:");
+    	info("Gathering production files:", VERBOSE);
     	final List<InfoFile> prodFiles = getProductionFiles();
-    	prodFiles.forEach( file -> info("- %s", file) );
-    	info("Gathering test files:");
+    	prodFiles.forEach( file -> info("- %s", file, VERBOSE) );
+    	info("Gathering test files:", VERBOSE);
     	final List<InfoFile> testFiles = getTestFiles();
-    	testFiles.forEach( file -> info("- %s", file) );
-    	info("Matching prod-test files:");
+    	testFiles.forEach( file -> info("- %s", file, VERBOSE) );
+    	info("Matching prod-test files:", VERBOSE);
     	final Map<InfoFile, InfoFile> matchedFiles = matchProductionToTestFile(prodFiles, testFiles);
-    	matchedFiles.entrySet().forEach( entry -> info("- %s > %s", entry.getKey().name(), entry.getValue().name()) );
+    	matchedFiles.entrySet().forEach( entry -> info("- %s > %s", entry.getKey().name(), entry.getValue().name(), VERBOSE) );
     	File inputCSV = null;
     	try {
 			inputCSV = File.createTempFile("inputCSV", null);
@@ -204,9 +181,21 @@ public class MyMojo extends AbstractMojo
 		}
     	final File lastOutputReport = getLastOutputReport();
         
-        if (lastOutputReport == null) throw new MojoExecutionException("no output test smells files were found");
+        if (lastOutputReport == null) throw new MojoExecutionException("No output test smells files were found");
 
-    	reportCSVGenerated(lastOutputReport);
+    	long totalTSDetected = reportCSVGenerated(lastOutputReport);
+    	if (totalTSDetected != 0)
+    	{
+    		if (totalTSDetected > threshold)
+    		{
+    			error("Test Smells threshold exceeded!");
+    			error("Threshold: %d", threshold);
+    			error("Total Test Smells: %d", totalTSDetected);
+    			error("Aborting execution");
+    			throw new MojoExecutionException("Test Smells threshold exceeded!");
+    		}
+			warn("Total Test Smells: %d", totalTSDetected);
+    	}
     }
     
     private File getLastOutputReport() throws MojoExecutionException {
@@ -229,8 +218,9 @@ public class MyMojo extends AbstractMojo
         }
     }
     
-    private void reportCSVGenerated ( File lastOutputReport ) throws MojoExecutionException
+    private long reportCSVGenerated ( File lastOutputReport ) throws MojoExecutionException
     {
+    	long result = 0;
     	try {
             final int NON_TEST_SMELL_COLUMNS = 7;
 
@@ -241,22 +231,33 @@ public class MyMojo extends AbstractMojo
                                               .collect(Collectors.toList()))
                            .orElse(Collections.emptyList());
 
-            Files.lines(lastOutputReport.toPath()).skip(1)
-                .forEach(line -> {
-                    String[] splitLine = line.split(",");
-                    info("App: %s", splitLine[0]);
-                    info("Test file path: %s", splitLine[2]);
-
-                    for (int i = NON_TEST_SMELL_COLUMNS; i < splitLine.length; i++) {
-                        String str = splitLine[i];
-                        if (str.matches("\\d+") && Long.parseLong(str) > 0) {
-                            info("%s count: %d", smells.get(i - NON_TEST_SMELL_COLUMNS), Long.parseLong(str));                            
-                        }
-                    }
-                });
+            boolean printedBefore = false;
+            for(String line: Files.lines(lastOutputReport.toPath()).skip(1).collect(Collectors.toList()))
+            {
+				final String[] splitLine = line.split(",");
+				final String app = splitLine[0];
+				final String testFile = splitLine[2];
+				for (int i = NON_TEST_SMELL_COLUMNS; i < splitLine.length; i++) {
+					String str = splitLine[i];
+					if (str.matches("\\d+") && Long.parseLong(str) > 0) {
+						long count = Long.parseLong(str);
+						result += count;
+						if (!printedBefore)
+						{
+							warn("Detected test smells:");
+							warn(" -       App: %s", app);
+							warn(" - Test File: %s", testFile);
+						}
+						warn("  + %s count: %d", smells.get(i - NON_TEST_SMELL_COLUMNS), count);                            
+						printedBefore = true;
+					}
+				}
+				printedBefore = false;
+            }
         } catch (IOException e) {
             throw reportException(e, "Couldn't open specified output report file");
         }
+    	return result;
     }
     
     public void writeInputCSV ( final File inputCSV, final Map<InfoFile, InfoFile> matchedFiles ) throws MojoExecutionException
@@ -276,10 +277,12 @@ public class MyMojo extends AbstractMojo
     
     private Process runJAR ( File inputCSV ) throws MojoExecutionException
     {
-    	ProcessBuilder runner = new ProcessBuilder("java", "-jar", jar.getAbsolutePath(), inputCSV.getAbsolutePath());
+    	String[] cmdline = {"java", "-jar", jar.getAbsolutePath(), inputCSV.getAbsolutePath()};
+    	ProcessBuilder runner = new ProcessBuilder(cmdline);
     	runner.redirectErrorStream(true);
 		runner.directory(projReportDir);
 		try {
+			info("Starting command: %s", String.join(" ", cmdline), VERBOSE);
 			return runner.start();
 		}
 		catch (IOException e) {
@@ -287,24 +290,24 @@ public class MyMojo extends AbstractMojo
 		}
     }
     
-    public List<InfoFile> getProductionFiles ( )
+    private List<InfoFile> getProductionFiles ( )
     {
     	return getFullpathFiles(sourceCodeDir).stream().filter(isJavaFile).map(InfoFile::new).collect(Collectors.toList());
     }
     
-    public List<InfoFile> getTestFiles ( )
+    private List<InfoFile> getTestFiles ( )
     {
     	return getFullpathFiles(testCodeDir).stream().filter(isJavaFile).map(InfoFile::new).collect(Collectors.toList());
     }
     
-    public boolean checkProductionMatchTestFile ( InfoFile prodFile, InfoFile testFile )
+    private boolean checkProductionMatchTestFile ( InfoFile prodFile, InfoFile testFile )
     {
     	return testFile.name().equals(prodFile.name()+"Test")
     		   || testFile.name().equals(prodFile.name()+"TestSuite")
     		   || testFile.name().equals("Test"+prodFile.name());
     }
     
-    public Map<InfoFile, InfoFile> matchProductionToTestFile ( final List<InfoFile> prodFiles, final List<InfoFile> testFiles )
+    private Map<InfoFile, InfoFile> matchProductionToTestFile ( final List<InfoFile> prodFiles, final List<InfoFile> testFiles )
     {
     	Map<InfoFile, InfoFile> result = new HashMap<>();
     	boolean[] testFilesMask = new boolean[testFiles.size()];
@@ -325,7 +328,7 @@ public class MyMojo extends AbstractMojo
     	return result;
     }
     
-    public List<String> getFullpathFiles ( File dir )
+    private List<String> getFullpathFiles ( File dir )
     {
     	final List<String> result = new ArrayList<>();
     	getFullpathFiles(dir, result);
@@ -351,10 +354,10 @@ public class MyMojo extends AbstractMojo
 		try {
 			bytes = new byte[out.available()];
 			out.read(bytes,0,bytes.length);
-			info("Output for PID[%d]: %s", proc.pid(), new String(bytes));
+			info(new String(bytes), VERBOSE);
 		}
 		catch (IOException e) {
-			throw reportException(e, "There was an error reading the output for PID[%d]", proc.pid());
+			throw reportException(e, "There was an error reading the output for the process");
 		}
 	}
     
@@ -364,9 +367,9 @@ public class MyMojo extends AbstractMojo
     	try {
 			Field attribute = clazz.getDeclaredField(name);
 			if (fmt != null)
-				info(fmt, name, attribute.get(this));
+				info(fmt, name, attribute.get(this), VERBOSE);
 			else
-				info("%s: %s", name, attribute.get(this));
+				info("%s: %s", name, attribute.get(this), VERBOSE);
 		} catch (NoSuchFieldException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
