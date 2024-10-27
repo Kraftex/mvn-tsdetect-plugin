@@ -28,41 +28,6 @@ public class MyMojo extends AbstractMojo
 {
 	private static final String JAVA_EXT = ".java";
 	private static final Predicate<String> isJavaFile = file -> file.endsWith(JAVA_EXT);
-	public class ProcessHolder
-	{
-		/*public static ProcessHolder from ( ProcessBuilder builder )
-		{
-			return new ProcessHolder(builder.start());
-		}*/
-		
-		private Process proc;
-		
-		public ProcessHolder ( Process proc )
-		{
-			this.proc = proc;
-			info("PID[%d]", proc.pid());
-		}
-		
-		public ProcessHolder waitFor ( ) throws InterruptedException
-		{
-			proc.waitFor();
-			return this;
-		}
-		
-		public void printOutput ( )
-		{
-			InputStream out = proc.getInputStream();
-			byte b[];
-			try {
-				b = new byte[out.available()];
-				out.read(b,0,b.length);
-				info(new String(b));
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-		}
-	}
 	
 	public static class SuperObject
 	{
@@ -161,7 +126,7 @@ public class MyMojo extends AbstractMojo
     @Parameter(property = "tsdetect.verbose")
     private boolean verbose = false;
     
-    @Parameter(defaultValue = "java", property = "tsdetect.java", required = false)
+    @Parameter(defaultValue = "java", property = "tsdetect.java")
     private String java;
     
     @Parameter
@@ -190,6 +155,10 @@ public class MyMojo extends AbstractMojo
     	printAttribute("nothing", "- %s: %s");
     	printAttribute("verbose", "- %s: %s");
     	printAttribute("jar", "- %s: %s");
+    	if (jar == null)
+    	{
+    		throw reportException(null, "Property 'tsdetect.jar' or configuration for 'jar' no configure.");
+    	}
     	if (!jar.exists())
     	{
     		throw reportException(null, "File '%s' doesn't exist.\nCheck property 'tsdetect.jar' or configuration for 'jar'.", jar.getAbsolutePath());
@@ -218,33 +187,34 @@ public class MyMojo extends AbstractMojo
     		throw reportException(e, "Can't create the input file to run the JAR.\nDirectory: %s", pwd());
 		}
     	try {
-    		//new ProcessHolder(runCMD("pwd")).waitFor().printOutput();
-			new ProcessHolder(runJAR(inputCSV)).waitFor().printOutput();
+    		Process jarRunning = runJAR(inputCSV);
+    		jarRunning.waitFor();
+    		printOutputFor(jarRunning);
 		}
     	catch (InterruptedException e) {
     		throw reportException(e, "There was an error running the JAR.");
 		}
-    	
-    	//Report errors through MojoExecutionException, wrapping actual Exception
-    	//throw reportException(e, "Error creating file %s", filename);
+    	final File lastOutputReport = getLastOutputReport();
+    	reportCSVGenerated(lastOutputReport);
     }
     
+    //TODO
     private File getLastOutputReport ( )
     {
     	return null;
     }
     
-    private Process runCMD ( String... cmd ) throws MojoExecutionException
+    //TODO
+    private void reportCSVGenerated ( File lastOutputReport )
     {
-    	ProcessBuilder runner = new ProcessBuilder(cmd);
-    	runner.redirectErrorStream(true);
-		//runner.directory(projReportDir);
-		try {
-			return runner.start();
-		}
-		catch (IOException e) {
-    		throw reportException(e, "Can't run the JAR.");
-		}
+    	//Evaluate the CSV, if there are any test smells, then stop the execution
+    	//Use a threshold for stop the execution?
+    }
+    
+	//TODO
+    public void writeInputCSV ( final File inputCSV, final Map<InfoFile, InfoFile> mathedFiles )
+    {
+    	//Format to write: appName(artifactId), testFile, sourceFile
     }
     
     private Process runJAR ( File inputCSV ) throws MojoExecutionException
@@ -256,14 +226,8 @@ public class MyMojo extends AbstractMojo
 			return runner.start();
 		}
 		catch (IOException e) {
-    		throw reportException(e, "Can't run the JAR.");
+    		throw reportException(e, "Can't run the JAR.\nCheck your PATH variable or set on configuration <java> the full path to java executable.");
 		}
-    }
-    
-    public void writeInputCSV ( final File inputCSV, final Map<InfoFile, InfoFile> mathedFiles )
-    {
-    	//TODO
-    	//Format to write: appName, testFile, sourceFile
     }
     
     public List<InfoFile> getProductionFiles ( )
@@ -322,6 +286,20 @@ public class MyMojo extends AbstractMojo
     		getFullpathFiles(files, result);
     	}
     }
+
+    private void printOutputFor ( Process proc ) throws MojoExecutionException
+	{
+		InputStream out = proc.getInputStream();
+		byte bytes[];
+		try {
+			bytes = new byte[out.available()];
+			out.read(bytes,0,bytes.length);
+			info("Output for PID[%d]: %s", proc.pid(), new String(bytes));
+		}
+		catch (IOException e) {
+			throw reportException(e, "There was an error reading the output for PID[%d]", proc.pid());
+		}
+	}
     
     private void printAttribute ( String name, String fmt )
     {
