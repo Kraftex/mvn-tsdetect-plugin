@@ -250,7 +250,7 @@ public class MyMojo extends AbstractMojo
                     for (int i = NON_TEST_SMELL_COLUMNS; i < splitLine.length; i++) {
                         String str = splitLine[i];
                         if (str.matches("\\d+") && Long.parseLong(str) > 0) {
-                            info("%s count: %d", smells.get(i), Long.parseLong(str));                            
+                            info("%s count: %d", smells.get(i - NON_TEST_SMELL_COLUMNS), Long.parseLong(str));                            
                         }
                     }
                 });
