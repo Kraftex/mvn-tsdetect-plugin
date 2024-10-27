@@ -210,16 +210,21 @@ public class MyMojo extends AbstractMojo
         final String EXTENSION = ".csv";
         try {
             return Stream.of(projReportDir.listFiles())
-            .filter(file -> !file.isDirectory())
-            .filter(file -> file.getName().endsWith(EXTENSION) && file.getName().startsWith(PREFIX))
-            .max(Comparator.comparingLong(file -> 
-                Long.parseLong(file.getName().substring(PREFIX.length(), file.getName().length() - EXTENSION.length()))
-            ))
-            .orElse(null);
+                .filter(file -> !file.isDirectory())
+                .filter(file -> file.getName().startsWith(PREFIX) && file.getName().endsWith(EXTENSION))
+                .filter(file -> {
+                    String timestamp = file.getName().substring(PREFIX.length(), file.getName().length() - EXTENSION.length());
+                    return timestamp.matches("\\d+");
+                })
+                .max(Comparator.comparingLong(file ->
+                    Long.parseLong(file.getName().substring(PREFIX.length(), file.getName().length() - EXTENSION.length()))
+                ))
+                .orElse(null);
         } catch (NumberFormatException e) {
-            throw reportException(e, "couldn't parse a filename's milisecond timestamp as long");
+            throw reportException(e, "Couldn't parse a filename's millisecond timestamp as long");
         }
     }
+    
     
     private void reportCSVGenerated ( File lastOutputReport ) throws MojoExecutionException
     {
@@ -228,9 +233,6 @@ public class MyMojo extends AbstractMojo
                 .forEach(line -> {
                     info("App: %s", null);
                     info("Test file name: %s", null);
-                    info("Test file path: %s", null);
-                    info("Production file path: %s", null);
-                    info("Relative test file path: %s", null);
                     info("Number of test methods: %s", null);
                     info("App: %s", null);
                 });
