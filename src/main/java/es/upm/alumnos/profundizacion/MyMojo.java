@@ -263,7 +263,7 @@ public class MyMojo extends AbstractMojo
     {
         try {
             FileWriter outputfile = new FileWriter(inputCSV);
-            CSVWriter writer = new CSVWriter(outputfile); 
+            CSVWriter writer = new CSVWriter(outputfile, ',', CSVWriter.NO_QUOTE_CHARACTER, CSVWriter.DEFAULT_ESCAPE_CHARACTER, CSVWriter.DEFAULT_LINE_END);
             for (Map.Entry<InfoFile, InfoFile> entry : matchedFiles.entrySet()) {
                 String[] header = { projArtifactId, entry.getValue().filepath, entry.getKey().filepath}; 
                 writer.writeNext(header); 
