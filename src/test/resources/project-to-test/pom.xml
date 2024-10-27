@@ -14,7 +14,7 @@
   <properties>
     <tsdetect.inputCSV>InputCSV from Project pom.xml</tsdetect.inputCSV>
   </properties>
-
+<!--
   <dependencyManagement>
     <dependencies>
       <dependency>
@@ -49,7 +49,7 @@
     </dependency>
 
   </dependencies>
-
+-->
   <build>
 
     <plugins>
@@ -64,6 +64,7 @@
           <!-- 
             <jar>/path/to/TSDetect.jar</jar>
            -->
+           <jar>/home/kraftex/my_programs/muii-master/Profundización en Ingeniería del Software/github-projects/TestSmellDetector.jar</jar>
         </configuration>
         <executions>
           <execution>
