@@ -8,17 +8,25 @@ import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 
+import com.opencsv.CSVWriter;
+
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
+import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Goal execute tsdetect without any Test Smell detected.
@@ -195,26 +203,75 @@ public class MyMojo extends AbstractMojo
     		throw reportException(e, "There was an error running the JAR.");
 		}
     	final File lastOutputReport = getLastOutputReport();
+        
+        if (lastOutputReport == null) throw new MojoExecutionException("no output test smells files were found");
+
     	reportCSVGenerated(lastOutputReport);
     }
     
-    //TODO
-    private File getLastOutputReport ( )
-    {
-    	return null;
+    private File getLastOutputReport() throws MojoExecutionException {
+        final String PREFIX = "Output_TestSmellDetection_";
+        final String EXTENSION = ".csv";
+        try {
+            return Stream.of(projReportDir.listFiles())
+                .filter(file -> !file.isDirectory())
+                .filter(file -> file.getName().startsWith(PREFIX) && file.getName().endsWith(EXTENSION))
+                .filter(file -> {
+                    String timestamp = file.getName().substring(PREFIX.length(), file.getName().length() - EXTENSION.length());
+                    return timestamp.matches("\\d+");
+                })
+                .max(Comparator.comparingLong(file ->
+                    Long.parseLong(file.getName().substring(PREFIX.length(), file.getName().length() - EXTENSION.length()))
+                ))
+                .orElse(null);
+        } catch (NumberFormatException e) {
+            throw reportException(e, "Couldn't parse a filename's milisecond timestamp as long");
+        }
     }
     
-    //TODO
-    private void reportCSVGenerated ( File lastOutputReport )
+    private void reportCSVGenerated ( File lastOutputReport ) throws MojoExecutionException
     {
-    	//Evaluate the CSV, if there are any test smells, then stop the execution
-    	//Use a threshold for stop the execution?
+    	try {
+            final int NON_TEST_SMELL_COLUMNS = 7;
+
+            List<String> smells = Files.lines(lastOutputReport.toPath())
+                           .findFirst()
+                           .map(line -> Arrays.stream(line.split(","))
+                                              .skip(NON_TEST_SMELL_COLUMNS) 
+                                              .collect(Collectors.toList()))
+                           .orElse(Collections.emptyList());
+
+            Files.lines(lastOutputReport.toPath()).skip(1)
+                .forEach(line -> {
+                    String[] splitLine = line.split(",");
+                    info("App: %s", splitLine[0]);
+                    info("Test file path: %s", splitLine[2]);
+
+                    for (int i = NON_TEST_SMELL_COLUMNS; i < splitLine.length; i++) {
+                        String str = splitLine[i];
+                        if (str.matches("\\d+") && Long.parseLong(str) > 0) {
+                            info("%s count: %d", smells.get(i), Long.parseLong(str));                            
+                        }
+                    }
+                });
+        } catch (IOException e) {
+            throw reportException(e, "Couldn't open specified output report file");
+        }
     }
     
-	//TODO
-    public void writeInputCSV ( final File inputCSV, final Map<InfoFile, InfoFile> mathedFiles )
+    public void writeInputCSV ( final File inputCSV, final Map<InfoFile, InfoFile> matchedFiles ) throws MojoExecutionException
     {
-    	//Format to write: appName(artifactId), testFile, sourceFile
+        try {
+            FileWriter outputfile = new FileWriter(inputCSV);
+            CSVWriter writer = new CSVWriter(outputfile); 
+            for (Map.Entry<InfoFile, InfoFile> entry : matchedFiles.entrySet()) {
+                String[] header = { projArtifactId, entry.getValue().filepath, entry.getKey().filepath}; 
+                writer.writeNext(header); 
+            }
+            writer.close();
+        } catch (IOException e) {
+            throw reportException(e, "failed to write temporary csv file for .jar input");
+        }
     }
     
     private Process runJAR ( File inputCSV ) throws MojoExecutionException
