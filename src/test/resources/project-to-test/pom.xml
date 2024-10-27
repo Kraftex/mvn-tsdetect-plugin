@@ -65,6 +65,7 @@
             <jar>/path/to/TSDetect.jar</jar>
            -->
            <jar>/home/kraftex/my_programs/muii-master/Profundización en Ingeniería del Software/github-projects/TestSmellDetector.jar</jar>
+           <threshold>100</threshold>
         </configuration>
         <executions>
           <execution>
